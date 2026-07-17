@@ -17,8 +17,8 @@ use remoteprocess::ProcessMemory;
 use crate::binary_parser::{parse_binary, BinaryInfo};
 use crate::config::Config;
 use crate::python_bindings::{
-    pyruntime, v2_7_15, v3_10_0, v3_11_0, v3_12_0, v3_13_0, v3_14_0, v3_3_7, v3_5_5, v3_6_6,
-    v3_7_0, v3_8_0, v3_9_5,
+    pyruntime, v2_7_15, v3_10_0, v3_11_0, v3_12_0, v3_13_0, v3_14_0, v3_14_5, v3_3_7, v3_5_5,
+    v3_6_6, v3_7_0, v3_8_0, v3_9_5,
 };
 use crate::python_interpreters::{InterpreterState, ThreadState};
 use crate::stack_trace::get_stack_traces;
@@ -452,41 +452,19 @@ where
     match version {
         Version {
             major: 3,
-            minor: 13..=14,
+            minor: 13,
             ..
         } => {
             if let Some(&pyruntime_addr) = python_info.get_symbol("_PyRuntime") {
                 // figure out the interpreters_head location using the debug_offsets
-                match version {
-                    Version {
-                        major: 3,
-                        minor: 14,
-                        ..
-                    } => {
-                        let debug_offsets: v3_14_0::_Py_DebugOffsets =
-                            process.copy_struct(pyruntime_addr as usize)?;
-                        return process
-                            .copy_struct(
-                                pyruntime_addr as usize
-                                    + debug_offsets.runtime_state.interpreters_head as usize,
-                            )
-                            .context(
-                                "Failed to copy py_debug_offsets.runtime_state.interpreters_head",
-                            );
-                    }
-                    _ => {
-                        let debug_offsets: v3_13_0::_Py_DebugOffsets =
-                            process.copy_struct(pyruntime_addr as usize)?;
-                        return process
-                            .copy_struct(
-                                pyruntime_addr as usize
-                                    + debug_offsets.runtime_state.interpreters_head as usize,
-                            )
-                            .context(
-                                "Failed to copy py_debug_offsets.runtime_state.interpreters_head",
-                            );
-                    }
-                };
+                let debug_offsets: v3_13_0::_Py_DebugOffsets =
+                    process.copy_struct(pyruntime_addr as usize)?;
+                return process
+                    .copy_struct(
+                        pyruntime_addr as usize
+                            + debug_offsets.runtime_state.interpreters_head as usize,
+                    )
+                    .context("Failed to copy py_debug_offsets.runtime_state.interpreters_head");
             }
         }
         Version {
@@ -651,8 +629,15 @@ where
         Version {
             major: 3,
             minor: 14,
+            patch: 0..=4,
             ..
         } => check::<v3_14_0::_is, P>(addrs, maps, process),
+        Version {
+            major: 3,
+            minor: 14,
+            patch: 5,
+            ..
+        } => check::<v3_14_5::_is, P>(addrs, maps, process),
         _ => Err(format_err!("Unsupported version of Python: {}", version)),
     }
 }
@@ -670,10 +655,28 @@ where
     let threadstate_address = match version {
         Version {
             major: 3,
-            minor: 13..=14,
+            minor: 13,
             ..
         } => {
             let gil_ptr = interpreter_address + std::mem::offset_of!(v3_13_0::_is, ceval.gil);
+            process.copy_struct::<usize>(gil_ptr)?
+        }
+        Version {
+            major: 3,
+            minor: 14,
+            patch: 0..=4,
+            ..
+        } => {
+            let gil_ptr = interpreter_address + std::mem::offset_of!(v3_14_0::_is, ceval.gil);
+            process.copy_struct::<usize>(gil_ptr)?
+        }
+        Version {
+            major: 3,
+            minor: 14,
+            patch: 5,
+            ..
+        } => {
+            let gil_ptr = interpreter_address + std::mem::offset_of!(v3_14_5::_is, ceval.gil);
             process.copy_struct::<usize>(gil_ptr)?
         }
         Version {
